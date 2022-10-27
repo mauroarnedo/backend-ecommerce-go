@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
@@ -115,8 +116,13 @@ func BuyItemFromCart(ctx context.Context, userCollection *mongo.Collection, user
 	}
 
 	filter2 := bson.D{primitive.E{Key: "_id", Value: id}}
-	update2 := bson.M{"$push": bson.M{"orders.$[].order_list": bson.M{"$each": getCartItems.User_Cart}}}
-	_, err = userCollection.UpdateOne(ctx, filter2, update2)
+	update2 := bson.M{"$push": bson.M{"orders.$[order].order_list": bson.M{"$each": getCartItems.User_Cart}}}
+	updateOptions2 := options.UpdateOptions{
+		ArrayFilters: &options.ArrayFilters{
+			Filters: []interface{}{bson.M{"order._id": orderCart.Order_ID}},
+		},
+	}
+	_, err = userCollection.UpdateOne(ctx, filter2, update2, &updateOptions2)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -161,8 +167,13 @@ func InstantBuy(ctx context.Context, productCollection, userCollection *mongo.Co
 	}
 
 	filter2 := bson.D{primitive.E{Key: "_id", Value: id}}
-	update2 := bson.D{{Key: "$push", Value: bson.D{primitive.E{Key: "orders.$[].order_list", Value: product}}}}
-	_, err = userCollection.UpdateOne(ctx, filter2, update2)
+	update2 := bson.M{"$push": bson.M{"orders.$[order].order_list": product}}
+	updateOptions2 := options.UpdateOptions{
+		ArrayFilters: &options.ArrayFilters{
+			Filters: []interface{}{bson.M{"order._id": orderCart.Order_ID}},
+		},
+	}
+	_, err = userCollection.UpdateOne(ctx, filter2, update2, &updateOptions2)
 	if err != nil {
 		log.Println(err)
 		return err

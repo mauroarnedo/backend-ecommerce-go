@@ -96,7 +96,7 @@ func EditHomeAddress() gin.HandlerFunc {
 		defer cancel()
 
 		filter := bson.D{primitive.E{Key: "_id", Value: u_id}}
-		update := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "address.0.house_name", Value: editAddress.House}, {Key: "address.0.street_name", Value: editAddress.Street}, {Key: "address.0.city_name", Value: editAddress.City}, {Key: "address.0.pin_code", Value: editAddress.Pin_Code}}}}
+		update := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "address.0.house", Value: editAddress.House}, {Key: "address.0.street", Value: editAddress.Street}, {Key: "address.0.city", Value: editAddress.City}, {Key: "address.0.pin_code", Value: editAddress.Pin_Code}}}}
 		_, err = UserCollection.UpdateOne(ctx, filter, update)
 		if err != nil {
 			c.IndentedJSON(500, "Something went wrong")
@@ -132,7 +132,7 @@ func EditWorkAddress() gin.HandlerFunc {
 		defer cancel()
 
 		filter := bson.D{primitive.E{Key: "_id", Value: user_id}}
-		update := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "address.1.house_name", Value: editAddress.House}, {Key: "address.1.street_name", Value: editAddress.Street}, {Key: "address.1.city_name", Value: editAddress.City}, {Key: "address.1.pin_code", Value: editAddress.Pin_Code}}}}
+		update := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "address.1.house", Value: editAddress.House}, {Key: "address.1.street", Value: editAddress.Street}, {Key: "address.1.city", Value: editAddress.City}, {Key: "address.1.pin_code", Value: editAddress.Pin_Code}}}}
 		_, err = UserCollection.UpdateOne(ctx, filter, update)
 		if err != nil {
 			c.IndentedJSON(500, "Something went wrong")
