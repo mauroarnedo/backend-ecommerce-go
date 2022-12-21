@@ -19,6 +19,7 @@ type User struct {
 	Updated_At      time.Time          `json:"updated_at"`
 	User_ID         string             `json:"user_id"`
 	User_Cart       []ProductUser      `json:"user_cart" bson:"user_cart"`
+	User_Favorites  []ProductUser      `json:"user_favorites" bson:"user_favorites"`
 	Address_Details []Address          `json:"address" bson:"address"`
 	Order_Status    []Order            `json:"orders" bson:"orders"`
 }
@@ -26,16 +27,18 @@ type User struct {
 type Product struct {
 	Product_ID   primitive.ObjectID `bson:"_id"`
 	Product_Name *string            `json:"product_name"`
-	Price        *uint64            `json:"price"`
-	Rating       *uint8             `json:"rating"`
+	Price        *float64           `json:"price"`
+	Rating       *float32           `json:"rating"`
+	Description  *string            `json:"description"`
 	Image        *string            `json:"image"`
 }
 
 type ProductUser struct {
 	Product_ID   primitive.ObjectID `bson:"_id"`
 	Product_Name *string            `json:"product_name" bson:"product_name"`
-	Price        *uint64            `json:"price" bson:"price"`
-	Rating       *uint8             `json:"rating" bson:"rating"`
+	Price        *float64           `json:"price" bson:"price"`
+	Rating       *float32           `json:"rating" bson:"rating"`
+	Description  *string            `json:"description" bson:"description"`
 	Image        *string            `json:"image" bson:"image"`
 }
 

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -57,6 +58,7 @@ func SignUp() gin.HandlerFunc {
 		validationErr := Validate.Struct(user)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr})
+			return
 		}
 
 		count, err := UserCollection.CountDocuments(ctx, bson.M{"email": user.Email})
@@ -70,11 +72,11 @@ func SignUp() gin.HandlerFunc {
 		}
 		count, err = UserCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Phone is already in use"})
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Phone is already in use"})
 			return
 		}
 		password := HashPassword(*user.Password)
@@ -88,6 +90,7 @@ func SignUp() gin.HandlerFunc {
 		user.Token = &token
 		user.Refresh_Token = &refreshToken
 		user.User_Cart = make([]models.ProductUser, 0)
+		user.User_Favorites = make([]models.ProductUser, 0)
 		user.Address_Details = make([]models.Address, 0)
 		user.Order_Status = make([]models.Order, 0)
 		_, insertErr := UserCollection.InsertOne(ctx, user)
@@ -115,7 +118,7 @@ func Login() gin.HandlerFunc {
 		err := UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
 		defer cancel()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "login or password incorrect"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "login or password incorrect"})
 			return
 		}
 
@@ -123,14 +126,87 @@ func Login() gin.HandlerFunc {
 		defer cancel()
 
 		if !passwordValid {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			fmt.Println(msg)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
 		token, refreshToken, _ := generate.TokenGenerator(*foundUser.Email, *foundUser.First_Name, *foundUser.Last_Name, foundUser.User_ID)
 		defer cancel()
 		generate.UpdateAllTokens(token, refreshToken, foundUser.User_ID)
 		c.JSON(http.StatusFound, foundUser)
+	}
+}
+
+func GetUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userQueryID := c.Query("id")
+		if userQueryID == "" {
+			log.Println("user id is empty")
+			c.AbortWithError(http.StatusBadRequest, errors.New("user id is empty"))
+			return
+		}
+
+		var user []models.User
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		id, err := primitive.ObjectIDFromHex(userQueryID)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		cursor, err := UserCollection.Find(ctx, bson.M{"_id": id})
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, "something went wrong, please try after some time")
+			return
+		}
+
+		if err = cursor.All(ctx, &user); err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		defer cursor.Close(ctx)
+
+		if err := cursor.Err(); err != nil {
+			log.Println(err)
+			c.JSON(400, "invalid")
+			return
+		}
+		defer cancel()
+		c.IndentedJSON(200, user[0])
+	}
+}
+
+func DeleteUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userQueryID := c.Query("id")
+		if userQueryID == "" {
+			log.Println("user id is empty")
+			c.AbortWithError(http.StatusBadRequest, errors.New("user id is empty"))
+			return
+		}
+
+		id, err := primitive.ObjectIDFromHex(userQueryID)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err = UserCollection.DeleteOne(ctx, bson.M{"_id": id})
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err)
+			return
+		}
+		defer cancel()
+
+		c.JSON(200, "The user was deleted successfully")
 	}
 }
 
@@ -151,6 +227,72 @@ func ProductViewerAdmin() gin.HandlerFunc {
 		}
 		defer cancel()
 		c.JSON(http.StatusOK, "Successfully added")
+	}
+}
+
+func ProductViewerAdminBulk() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+		var products []models.Product
+		defer cancel()
+
+		if err := c.BindJSON(&products); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+			return
+		}
+
+		productsInterface := make([]interface{}, len(products))
+
+		for i := range products {
+			products[i].Product_ID = primitive.NewObjectID()
+			productsInterface[i] = products[i]
+		}
+
+		_, err := ProductCollection.InsertMany(ctx, productsInterface)
+		if err != nil {
+			log.Fatal(err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"Error": "products cannot inserted"})
+			return
+		}
+		defer cancel()
+		c.JSON(http.StatusOK, "Successfully added")
+	}
+}
+
+func DeleteProduct() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		productQueryID := c.Query("id")
+		if productQueryID == "" {
+			log.Println("product id is empty")
+			c.AbortWithError(http.StatusBadRequest, errors.New("product id is empty"))
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		productID, err := primitive.ObjectIDFromHex(productQueryID)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		_, err = ProductCollection.DeleteOne(ctx, bson.M{"_id": productID})
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			panic(err)
+		}
+		defer cancel()
+
+		update := bson.M{"$pull": bson.M{"user_favorites": bson.M{"_id": productID}}}
+		_, err = UserCollection.UpdateMany(ctx, bson.M{}, update)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			panic(err)
+		}
+		defer cancel()
+
+		c.IndentedJSON(200, "Product was successfully deleted")
 	}
 }
 
@@ -221,5 +363,107 @@ func SearchProductByQuery() gin.HandlerFunc {
 		}
 		defer cancel()
 		c.IndentedJSON(200, searchProducts)
+	}
+}
+
+func AddFavorite() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		productQueryID := c.Query("id")
+		if productQueryID == "" {
+			log.Println("product id is empty")
+			c.Header("Content-Type", "application/json")
+			c.JSON(http.StatusNotFound, gin.H{"Error": "product id is empty"})
+			c.Abort()
+			return
+		}
+
+		userQueryID := c.Query("user_id")
+		if userQueryID == "" {
+			log.Println("user id is empty")
+			c.Header("Content-Type", "application/json")
+			c.JSON(http.StatusNotFound, gin.H{"Error": "user id is empty"})
+			return
+		}
+
+		productID, err := primitive.ObjectIDFromHex(productQueryID)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		userID, err := primitive.ObjectIDFromHex(userQueryID)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		var favorite_product models.ProductUser
+		filter := bson.M{"_id": productID}
+
+		err = ProductCollection.FindOne(ctx, filter).Decode(&favorite_product)
+		if err != nil {
+			c.IndentedJSON(http.StatusInternalServerError, "something went wrong, please try after some time")
+			return
+		}
+		defer cancel()
+
+		filter = bson.M{"_id": userID}
+		update := bson.M{"$push": bson.D{primitive.E{Key: "user_favorites", Value: favorite_product}}}
+		_, err = UserCollection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			c.IndentedJSON(http.StatusInternalServerError, "The product cannot be added to favorites")
+			return
+		}
+		c.IndentedJSON(200, "The product was added to favorites")
+	}
+}
+
+func RemoveFavorites() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		productQueryID := c.Query("id")
+		if productQueryID == "" {
+			log.Println("product id is empty")
+			c.AbortWithError(http.StatusBadRequest, errors.New("product id is empty"))
+			return
+		}
+
+		userQueryID := c.Query("user_id")
+		if userQueryID == "" {
+			log.Println("user id is empty")
+			c.AbortWithError(http.StatusBadRequest, errors.New("user id is empty"))
+			return
+		}
+
+		productID, err := primitive.ObjectIDFromHex(productQueryID)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		userID, err := primitive.ObjectIDFromHex(userQueryID)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		filter := bson.M{"_id": userID}
+		update := bson.M{"$pull": bson.M{"user_favorites": bson.M{"_id": productID}}}
+
+		_, err = UserCollection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, "user cannot be updated")
+			return
+		}
+		c.IndentedJSON(200, "Item was removed from favorites successfully")
 	}
 }
