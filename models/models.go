@@ -31,6 +31,7 @@ type Product struct {
 	Rating       *float32           `json:"rating"`
 	Description  *string            `json:"description"`
 	Image        *string            `json:"image"`
+	Comments     []Comment          `bson:"product_comments" json:"product_comments"`
 }
 
 type ProductUser struct {
@@ -62,4 +63,11 @@ type Order struct {
 type Payment struct {
 	Digital bool `json:"digital" bson:"digital"`
 	COD     bool `json:"cod" bson:"cod"`
+}
+
+type Comment struct {
+	User       User      `bson:"user" json:"user"`
+	Comment    *string   `bson:"comment" json:"comment"`
+	Created_At time.Time `json:"created_at"`
+	Updated_At time.Time `json:"updated_at"`
 }

@@ -31,5 +31,7 @@ func main() {
 	router.GET("/deleteaddresses", controllers.DeleteAddress())
 	router.GET("/cartcheckout", app.BuyFromCart())
 	router.GET("/instantbuy", app.InstantBuy())
+	router.POST("/addcomments", controllers.AddComments())
+	router.DELETE("/deletecomments", controllers.DeleteComments())
 	log.Fatal(router.Run(":" + port))
 }
